@@ -27,7 +27,7 @@ DHT dht(DHTPIN, DHTTYPE);
 ESP8266WebServer server(80);
 
 // ---------------- Variables ----------------
-String mode = "automatic";  
+String mode = "none";   // Start with NO mode
 bool pumpState = false;
 bool lightState = false;
 int pumpSpeedPWM = 1000;
@@ -89,14 +89,14 @@ void handleRoot() {
   int lightPercent = map(ldrRaw, 0, 1023, 0, 100);
 
   String page = "<html><head><title>Smart Agriculture</title>";
-  page += "<meta http-equiv='refresh' content='5'></head><body>";  // auto-refresh every 5s
+  page += "<meta http-equiv='refresh' content='5'></head><body>";
   page += "<h2>Smart Agriculture Control</h2>";
   page += "<p><b>Mode:</b> " + mode + "</p>";
   page += "<p>Temperature: " + String(temp) + " °C</p>";
   page += "<p>Humidity: " + String(hum) + " %</p>";
   page += "<p>Light: " + String(lightPercent) + " %</p>";
 
-  // Mode toggle
+  // Mode selection
   page += "<p><a href='/mode?set=automatic'><button>Automatic Mode</button></a> ";
   page += "<a href='/mode?set=manual'><button>Manual Mode</button></a></p>";
 
@@ -122,6 +122,7 @@ void handleMode() {
     if (newMode == "automatic" || newMode == "manual") {
       mode = newMode;
       if (mode == "automatic") applyAutomaticMode();
+      if (mode == "manual") { setPump(false); setLight(false); } // manual starts OFF
     }
   }
   server.sendHeader("Location", "/");
