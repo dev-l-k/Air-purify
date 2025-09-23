@@ -16,7 +16,7 @@ DHT dht(DHTPIN, DHTTYPE);
 
 #define LDR_PIN A0
 #define LIGHT_THRESHOLD 50    // light below 50% → turn ON LED
-#define TEMP_THRESHOLD 30.0   // temperature above 30°C → turn ON pump
+#define TEMP_THRESHOLD 32.0   // temperature above 32°C → turn ON pump
 
 // ---------------- L298N Pins ----------------
 // Pump Motor (Motor A) - Uses PWM for speed control
@@ -30,7 +30,7 @@ DHT dht(DHTPIN, DHTTYPE);
 #define IN4 D8           // GPIO15 (LED direction)
 
 // ---------------- Variables ----------------
-String mode = "automatic";  // START IN AUTOMATIC MODE
+String mode = "none";    // START WITH NO MODE SELECTED
 bool pumpState = false;
 bool lightState = false;
 int pumpSpeedPWM = 1000;    // Pump speed at maximum (1000/1023)
@@ -54,14 +54,19 @@ const char* htmlPage = R"rawliteral(
         .card { background: #fff; padding: 15px; margin: 10px 0; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
         .sensor-data { background: #e3f2fd; }
         .controls { background: #f3e5f5; }
-        button { padding: 10px 15px; margin: 5px; border: none; border-radius: 5px; cursor: pointer; }
+        button { padding: 10px 15px; margin: 5px; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; }
         .auto-btn { background: #4caf50; color: white; }
         .manual-btn { background: #ff9800; color: white; }
         .on-btn { background: #2196f3; color: white; }
         .off-btn { background: #f44336; color: white; }
-        .status { padding: 8px; border-radius: 4px; margin: 5px 0; }
+        .status { padding: 8px; border-radius: 4px; margin: 5px 0; display: inline-block; }
         .on-status { background: #c8e6c9; color: #2e7d32; }
         .off-status { background: #ffcdd2; color: #c62828; }
+        .mode-status { background: #9e9e9e; color: white; padding: 10px; border-radius: 5px; }
+        .auto-mode { background: #4caf50; }
+        .manual-mode { background: #ff9800; }
+        .sensor-value { font-size: 18px; font-weight: bold; color: #1976d2; }
+        .warning { background: #fff3e0; padding: 10px; border-radius: 5px; margin: 10px 0; }
     </style>
 </head>
 <body>
@@ -69,43 +74,68 @@ const char* htmlPage = R"rawliteral(
         <h1>🌱 Smart Agriculture System</h1>
         
         <div class="card sensor-data">
-            <h2>📊 Sensor Data</h2>
-            <div id="sensorData">Loading...</div>
+            <h2>📊 Live Sensor Data</h2>
+            <div id="sensorData">
+                <div>Temperature: <span class="sensor-value" id="tempValue">0</span>°C</div>
+                <div>Humidity: <span class="sensor-value" id="humValue">0</span>%</div>
+                <div>Light: <span class="sensor-value" id="lightValue">0</span>%</div>
+            </div>
         </div>
         
         <div class="card controls">
             <h2>⚙️ Control Panel</h2>
             
+            <div class="warning" id="modeWarning">
+                ⚠️ Please select a mode to start controlling the system
+            </div>
+            
             <div>
                 <strong>Mode Control:</strong><br>
-                <button class="auto-btn" onclick="setMode('automatic')">AUTOMATIC</button>
-                <button class="manual-btn" onclick="setMode('manual')">MANUAL</button>
-                <div class="status" id="modeStatus">Current: AUTOMATIC</div>
-            </div>
-            
-            <div id="manualControls" style="display:none;">
-                <strong>Manual Controls:</strong><br>
-                <button class="on-btn" onclick="controlDevice('pump', 'ON')">PUMP ON</button>
-                <button class="off-btn" onclick="controlDevice('pump', 'OFF')">PUMP OFF</button>
+                <button class="auto-btn" onclick="setMode('automatic')">AUTOMATIC MODE</button>
+                <button class="manual-btn" onclick="setMode('manual')">MANUAL MODE</button>
                 <br>
-                <button class="on-btn" onclick="controlDevice('light', 'ON')">LIGHT ON</button>
-                <button class="off-btn" onclick="controlDevice('light', 'OFF')">LIGHT OFF</button>
+                <div class="status mode-status" id="modeStatus">Current Mode: NOT SELECTED</div>
             </div>
             
-            <div>
+            <div id="manualControls" style="display:none; margin-top: 15px;">
+                <strong>Manual Controls:</strong><br>
+                <div style="margin: 10px 0;">
+                    Water Pump: 
+                    <button class="on-btn" onclick="controlDevice('pump', 'ON')">PUMP ON</button>
+                    <button class="off-btn" onclick="controlDevice('pump', 'OFF')">PUMP OFF</button>
+                </div>
+                <div style="margin: 10px 0;">
+                    LED Light: 
+                    <button class="on-btn" onclick="controlDevice('light', 'ON')">LIGHT ON</button>
+                    <button class="off-btn" onclick="controlDevice('light', 'OFF')">LIGHT OFF</button>
+                </div>
+            </div>
+            
+            <div id="autoInfo" style="display:none; background: #e8f5e8; padding: 10px; border-radius: 5px; margin-top: 15px;">
+                <strong>Automatic Mode Active:</strong><br>
+                • Pump will turn ON when Temperature ≥ 32°C<br>
+                • Light will turn ON when Light ≤ 50%
+            </div>
+            
+            <div style="margin-top: 15px;">
                 <strong>Device Status:</strong><br>
-                Pump: <span id="pumpStatus" class="status off-status">OFF</span><br>
-                Light: <span id="lightStatus" class="status off-status">OFF</span>
+                <div style="margin: 5px 0;">
+                    Pump: <span id="pumpStatus" class="status off-status">OFF</span>
+                </div>
+                <div style="margin: 5px 0;">
+                    Light: <span id="lightStatus" class="status off-status">OFF</span>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
-        function setMode(mode) {
-            fetch('/control?mode=' + mode)
+        function setMode(newMode) {
+            fetch('/control?mode=' + newMode)
                 .then(response => response.text())
                 .then(data => {
                     updateUI();
+                    showMessage("Mode changed to " + newMode.toUpperCase());
                 });
         }
 
@@ -114,6 +144,7 @@ const char* htmlPage = R"rawliteral(
                 .then(response => response.text())
                 .then(data => {
                     updateUI();
+                    showMessage(device.toUpperCase() + " turned " + action);
                 });
         }
 
@@ -122,15 +153,27 @@ const char* htmlPage = R"rawliteral(
                 .then(response => response.json())
                 .then(data => {
                     // Update sensor data
-                    document.getElementById('sensorData').innerHTML = 
-                        'Temperature: ' + data.temperature + '°C<br>' +
-                        'Humidity: ' + data.humidity + '%<br>' +
-                        'Light: ' + data.light + '%';
+                    document.getElementById('tempValue').textContent = data.temperature;
+                    document.getElementById('humValue').textContent = data.humidity;
+                    document.getElementById('lightValue').textContent = data.light;
                     
-                    // Update mode
-                    document.getElementById('modeStatus').textContent = 'Current: ' + data.mode.toUpperCase();
-                    document.getElementById('modeStatus').className = data.mode === 'automatic' ? 
-                        'status on-status' : 'status off-status';
+                    // Update mode display
+                    const modeStatus = document.getElementById('modeStatus');
+                    const modeWarning = document.getElementById('modeWarning');
+                    const autoInfo = document.getElementById('autoInfo');
+                    
+                    if(data.mode === 'none') {
+                        modeStatus.textContent = 'Current Mode: NOT SELECTED';
+                        modeStatus.className = 'status mode-status';
+                        modeWarning.style.display = 'block';
+                        autoInfo.style.display = 'none';
+                    } else {
+                        modeStatus.textContent = 'Current Mode: ' + data.mode.toUpperCase();
+                        modeStatus.className = data.mode === 'automatic' ? 
+                            'status mode-status auto-mode' : 'status mode-status manual-mode';
+                        modeWarning.style.display = 'none';
+                        autoInfo.style.display = data.mode === 'automatic' ? 'block' : 'none';
+                    }
                     
                     // Show/hide manual controls
                     document.getElementById('manualControls').style.display = 
@@ -145,6 +188,11 @@ const char* htmlPage = R"rawliteral(
                     document.getElementById('lightStatus').className = data.lightState ? 
                         'status on-status' : 'status off-status';
                 });
+        }
+
+        function showMessage(message) {
+            // Simple message display
+            console.log(message);
         }
 
         // Update data every 3 seconds
@@ -179,10 +227,11 @@ void setup() {
   digitalWrite(IN2, LOW);
 
   Serial.println("Smart Agriculture System Starting...");
-  Serial.println("Initial Mode: AUTOMATIC");
+  Serial.println("Initial State: NO MODE SELECTED - ALL DEVICES OFF");
   Serial.println("OUT1/2: Water Pump Motor");
   Serial.println("OUT3/4: 12V LED Bulb");
   Serial.println("Web Server Control Interface");
+  Serial.println("Please select a mode from the web interface to begin");
 
   // Connect to WiFi
   WiFi.begin(WLAN_SSID, WLAN_PASS);
@@ -214,20 +263,27 @@ void loop() {
   server.handleClient();
   yield();
 
-  // Read sensors and apply automatic logic every 5 seconds
+  // Read sensors every 3 seconds
   static unsigned long lastSensorTime = 0;
-  if(millis() - lastSensorTime > 5000){
+  if(millis() - lastSensorTime > 3000){
     lastSensorTime = millis();
 
+    // Read sensor data
     currentTemp = dht.readTemperature();
     currentHum = dht.readHumidity();
     int ldrRaw = analogRead(LDR_PIN);
     currentLight = map(ldrRaw, 0, 1023, 0, 100);
 
-    Serial.printf("Temp: %.1f°C, Hum: %.1f%%, Light: %d%%", currentTemp, currentHum, currentLight);
-    Serial.printf(", Mode: %s\n", mode.c_str());
+    // Handle NaN values
+    if(isnan(currentTemp)) currentTemp = 0;
+    if(isnan(currentHum)) currentHum = 0;
 
-    // Apply automatic mode logic
+    Serial.printf("Temp: %.1f°C, Hum: %.1f%%, Light: %d%%, Mode: %s", 
+                  currentTemp, currentHum, currentLight, mode.c_str());
+    Serial.printf(", Pump: %s, Light: %s\n", 
+                  pumpState ? "ON" : "OFF", lightState ? "ON" : "OFF");
+
+    // Apply automatic mode logic only if in automatic mode
     if(mode == "automatic"){
       applyAutomaticMode();
     }
@@ -250,9 +306,14 @@ void handleControl() {
       Serial.print("Mode changed to: ");
       Serial.println(mode);
       
-      // Apply automatic logic immediately when switching to auto mode
+      // If switching to automatic mode, apply the logic immediately
       if(mode == "automatic") {
         applyAutomaticMode();
+      }
+      // If switching to manual mode, ensure devices are off initially
+      else if(mode == "manual") {
+        setPump(false);
+        setLight(false);
       }
     }
   }
@@ -262,10 +323,12 @@ void handleControl() {
     if(server.hasArg("pump")) {
       String pumpCmd = server.arg("pump");
       setPump(pumpCmd == "ON");
+      Serial.println("Manual Pump Control: " + pumpCmd);
     }
     if(server.hasArg("light")) {
       String lightCmd = server.arg("light");
       setLight(lightCmd == "ON");
+      Serial.println("Manual Light Control: " + lightCmd);
     }
   }
   
@@ -275,8 +338,8 @@ void handleControl() {
 void handleData() {
   // Create JSON response with current data
   String json = "{";
-  json += "\"temperature\":" + String(isnan(currentTemp) ? "0" : String(currentTemp)) + ",";
-  json += "\"humidity\":" + String(isnan(currentHum) ? "0" : String(currentHum)) + ",";
+  json += "\"temperature\":" + String(currentTemp, 1) + ",";
+  json += "\"humidity\":" + String(currentHum, 1) + ",";
   json += "\"light\":" + String(currentLight) + ",";
   json += "\"mode\":\"" + mode + "\",";
   json += "\"pumpState\":" + String(pumpState ? "true" : "false") + ",";
@@ -286,25 +349,28 @@ void handleData() {
   server.send(200, "application/json", json);
 }
 
-// ---------------- Functions ----------------
+// ---------------- Automatic Mode Logic ----------------
 void applyAutomaticMode() {
-  float temp = dht.readTemperature();
-  int ldrRaw = analogRead(LDR_PIN);
-  int lightPercent = map(ldrRaw, 0, 1023, 0, 100);
+  bool newPumpState = false;
+  bool newLightState = false;
 
-  // Light control - turn ON LED if dark
-  if(lightPercent < LIGHT_THRESHOLD){ 
-    setLight(true); 
-  } else { 
-    setLight(false); 
+  // Automatic Logic: Pump ON when temperature >= 32°C
+  if(currentTemp >= TEMP_THRESHOLD) {
+    newPumpState = true;
+  } else {
+    newPumpState = false;
   }
 
-  // Pump control - turn ON pump if hot
-  if(!isnan(temp) && temp > TEMP_THRESHOLD){ 
-    setPump(true); 
-  } else { 
-    setPump(false); 
+  // Automatic Logic: Light ON when light <= 50%
+  if(currentLight <= LIGHT_THRESHOLD) {
+    newLightState = true;
+  } else {
+    newLightState = false;
   }
+
+  // Apply the new states
+  setPump(newPumpState);
+  setLight(newLightState);
 }
 
 void setPump(bool state){
