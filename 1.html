@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Smart Agriculture System</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { 
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); 
+            min-height: 100vh;
+            color: #333;
+        }
+        .container { 
+            max-width: 600px; 
+            margin: 0 auto; 
+            background: white; 
+            padding: 20px; 
+            border-radius: 16px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1); 
+        }
+        .card { 
+            background: #fff; 
+            padding: 20px; 
+            margin: 15px 0; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08); 
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+        }
+        .sensor-data { 
+            background: linear-gradient(135deg, #e8f5e8 0%, #f1f8e9 100%);
+            border-left: 4px solid #4caf50;
+        }
+        .controls { 
+            background: linear-gradient(135deg, #f3e5f5 0%, #fce4ec 100%);
+            border-left: 4px solid #ff9800;
+        }
+        h1 {
+            text-align: center;
+            color: #2e7d32;
+            margin-bottom: 30px;
+            font-size: 2em;
+            font-weight: 300;
+        }
+        h2 {
+            margin-top: 0;
+            color: #1976d2;
+            font-size: 1.5em;
+            font-weight: 500;
+        }
+        button { 
+            padding: 12px 20px; 
+            margin: 8px 4px 8px 0; 
+            border: none; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            font-size: 16px; 
+            font-weight: 500;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        .auto-btn { 
+            background: linear-gradient(135deg, #4caf50 0%, #45a049 100%); 
+            color: white; 
+        }
+        .manual-btn { 
+            background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%); 
+            color: white; 
+        }
+        .on-btn { 
+            background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%); 
+            color: white; 
+        }
+        .off-btn { 
+            background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%); 
+            color: white; 
+        }
+        .status { 
+            padding: 10px 15px; 
+            border-radius: 6px; 
+            margin: 8px 0; 
+            display: inline-block; 
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        .on-status { 
+            background: linear-gradient(135deg, #c8e6c9 0%, #a5d6a7 100%); 
+            color: #2e7d32; 
+        }
+        .off-status { 
+            background: linear-gradient(135deg, #ffcdd2 0%, #ef9a9a 100%); 
+            color: #c62828; 
+        }
+        .mode-status { 
+            background: linear-gradient(135deg, #9e9e9e 0%, #757575 100%); 
+            color: white; 
+            padding: 12px 16px; 
+            border-radius: 8px; 
+            font-size: 16px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        .auto-mode { 
+            background: linear-gradient(135deg, #4caf50 0%, #45a049 100%); 
+        }
+        .manual-mode { 
+            background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%); 
+        }
+        .sensor-value { 
+            font-size: 20px; 
+            font-weight: bold; 
+            color: #1976d2; 
+            background: rgba(25, 118, 210, 0.1);
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: color 0.3s ease;
+        }
+        .warning { 
+            background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%); 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin: 15px 0; 
+            border-left: 4px solid #ff9800;
+            color: #ef6c00;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        .sensor-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 12px 0;
+            padding: 10px;
+            background: rgba(255,255,255,0.7);
+            border-radius: 8px;
+            transition: background 0.3s ease;
+        }
+        .sensor-item:hover {
+            background: rgba(255,255,255,0.9);
+        }
+        .control-group {
+            margin: 15px 0;
+            padding: 15px;
+            background: rgba(255,255,255,0.7);
+            border-radius: 8px;
+        }
+        .device-control {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 10px 0;
+            padding: 10px;
+            background: rgba(255,255,255,0.5);
+            border-radius: 6px;
+        }
+        .device-label {
+            font-weight: 500;
+            color: #555;
+        }
+        #autoInfo { 
+            background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%); 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin: 15px 0; 
+            border-left: 4px solid #4caf50;
+            color: #2e7d32;
+        }
+        #autoInfo ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        #autoInfo li {
+            margin: 5px 0;
+        }
+        .loading {
+            opacity: 0.7;
+            transition: opacity 0.3s ease;
+        }
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            .container {
+                padding: 15px;
+                margin: 10px;
+                border-radius: 12px;
+            }
+            h1 {
+                font-size: 1.8em;
+                margin-bottom: 20px;
+            }
+            h2 {
+                font-size: 1.3em;
+            }
+            button {
+                padding: 10px 16px;
+                font-size: 14px;
+                margin: 5px 2px;
+                flex: 1;
+                min-width: 120px;
+            }
+            .sensor-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 5px;
+            }
+            .device-control {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 10px;
+            }
+            .device-label {
+                text-align: center;
+                margin-bottom: 5px;
+            }
+            .status {
+                padding: 8px 12px;
+                font-size: 14px;
+            }
+            .mode-status {
+                font-size: 14px;
+                padding: 10px 12px;
+            }
+        }
+        @media (max-width: 480px) {
+            .container {
+                padding: 10px;
+                margin: 5px;
+            }
+            button {
+                padding: 8px 12px;
+                font-size: 13px;
+                min-width: 100px;
+            }
+            .card {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Smart Agriculture System</h1>
+        
+        <div class="card sensor-data">
+            <h2>Live Sensor Data</h2>
+            <div id="sensorData">
+                <div class="sensor-item">
+                    <span>Temperature:</span>
+                    <span class="sensor-value" id="tempValue">0</span>°C
+                </div>
+                <div class="sensor-item">
+                    <span>Humidity:</span>
+                    <span class="sensor-value" id="humValue">0</span>%
+                </div>
+                <div class="sensor-item">
+                    <span>Light:</span>
+                    <span class="sensor-value" id="lightValue">0</span>%
+                </div>
+            </div>
+        </div>
+        
+        <div class="card controls">
+            <h2>Control Panel</h2>
+            
+            <div class="warning" id="modeWarning">
+                Please select a mode to start controlling the system
+            </div>
+            
+            <div class="control-group">
+                <strong>Mode Control:</strong>
+                <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px;">
+                    <button class="auto-btn" onclick="setMode('automatic')">AUTOMATIC MODE</button>
+                    <button class="manual-btn" onclick="setMode('manual')">MANUAL MODE</button>
+                </div>
+                <div class="status mode-status" id="modeStatus">Current Mode: NOT SELECTED</div>
+            </div>
+            
+            <div id="manualControls" style="display:none;">
+                <strong>Manual Controls:</strong>
+                <div class="control-group">
+                    <div class="device-control">
+                        <span class="device-label">Water Pump:</span>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="on-btn" onclick="controlDevice('pump', 'ON')">PUMP ON</button>
+                            <button class="off-btn" onclick="controlDevice('pump', 'OFF')">PUMP OFF</button>
+                        </div>
+                    </div>
+                    <div class="device-control">
+                        <span class="device-label">LED Light:</span>
+                        <div style="display: flex; gap: 10px;">
+                            <button class="on-btn" onclick="controlDevice('light', 'ON')">LIGHT ON</button>
+                            <button class="off-btn" onclick="controlDevice('light', 'OFF')">LIGHT OFF</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="autoInfo" style="display:none;">
+                <strong>Automatic Mode Active:</strong>
+                <ul>
+                    <li>Pump will turn ON when Temperature ≥ 32°C</li>
+                    <li>Light will turn ON when Light ≤ 50%</li>
+                </ul>
+            </div>
+            
+            <div class="control-group">
+                <strong>Device Status:</strong>
+                <div style="margin: 10px 0;">
+                    Pump: <span id="pumpStatus" class="status off-status">OFF</span>
+                </div>
+                <div style="margin: 10px 0;">
+                    Light: <span id="lightStatus" class="status off-status">OFF</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function setMode(newMode) {
+            document.body.classList.add('loading');
+            fetch('/control?mode=' + newMode)
+                .then(response => response.text())
+                .then(data => {
+                    updateUI();
+                    showMessage("Mode changed to " + newMode.toUpperCase());
+                    document.body.classList.remove('loading');
+                })
+                .catch(() => document.body.classList.remove('loading'));
+        }
+
+        function controlDevice(device, action) {
+            document.body.classList.add('loading');
+            fetch('/control?' + device + '=' + action)
+                .then(response => response.text())
+                .then(data => {
+                    updateUI();
+                    showMessage(device.toUpperCase() + " turned " + action);
+                    document.body.classList.remove('loading');
+                })
+                .catch(() => document.body.classList.remove('loading'));
+        }
+
+        function updateUI() {
+            fetch('/data')
+                .then(response => response.json())
+                .then(data => {
+                    // Update sensor data with transition
+                    const tempEl = document.getElementById('tempValue');
+                    const humEl = document.getElementById('humValue');
+                    const lightEl = document.getElementById('lightValue');
+                    
+                    tempEl.style.transition = 'color 0.5s ease';
+                    humEl.style.transition = 'color 0.5s ease';
+                    lightEl.style.transition = 'color 0.5s ease';
+                    
+                    tempEl.textContent = data.temperature;
+                    humEl.textContent = data.humidity;
+                    lightEl.textContent = data.light;
+                    
+                    // Update mode display
+                    const modeStatus = document.getElementById('modeStatus');
+                    const modeWarning = document.getElementById('modeWarning');
+                    const autoInfo = document.getElementById('autoInfo');
+                    
+                    if(data.mode === 'none') {
+                        modeStatus.textContent = 'Current Mode: NOT SELECTED';
+                        modeStatus.className = 'status mode-status';
+                        modeWarning.style.display = 'block';
+                        autoInfo.style.display = 'none';
+                    } else {
+                        modeStatus.textContent = 'Current Mode: ' + data.mode.toUpperCase();
+                        modeStatus.className = data.mode === 'automatic' ? 
+                            'status mode-status auto-mode' : 'status mode-status manual-mode';
+                        modeWarning.style.display = 'none';
+                        autoInfo.style.display = data.mode === 'automatic' ? 'block' : 'none';
+                    }
+                    
+                    // Show/hide manual controls
+                    document.getElementById('manualControls').style.display = 
+                        data.mode === 'manual' ? 'block' : 'none';
+                    
+                    // Update device status with transition
+                    const pumpStatus = document.getElementById('pumpStatus');
+                    const lightStatus = document.getElementById('lightStatus');
+                    
+                    pumpStatus.style.transition = 'all 0.3s ease';
+                    lightStatus.style.transition = 'all 0.3s ease';
+                    
+                    pumpStatus.textContent = data.pumpState ? 'ON' : 'OFF';
+                    pumpStatus.className = data.pumpState ? 
+                        'status on-status' : 'status off-status';
+                    
+                    lightStatus.textContent = data.lightState ? 'ON' : 'OFF';
+                    lightStatus.className = data.lightState ? 
+                        'status on-status' : 'status off-status';
+                })
+                .catch(() => {
+                    // Handle error silently or show message
+                });
+        }
+
+        function showMessage(message) {
+            // Simple message display - could be enhanced with a toast, but keeping console for now
+            console.log(message);
+        }
+
+        // Update data every 3 seconds
+        setInterval(updateUI, 3000);
+        // Initial update
+        updateUI();
+    </script>
+</body>
+</html>
