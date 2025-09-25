@@ -1,171 +1,247 @@
 #include <ESP8266WiFi.h>
+#include <WiFiClient.h>
 #include <ESP8266WebServer.h>
-#include "DHT.h"
 
-// ---------------- WiFi ----------------
-#define WLAN_SSID   "YOUR_WIFI_SSID"
-#define WLAN_PASS   "YOUR_WIFI_PASSWORD"
+// WiFi credentials
+const char* ssid = "YourWiFiSSID";
+const char* password = "YourWiFiPassword";
 
-// ---------------- Sensors ----------------
-#define DHTPIN D1
-#define DHTTYPE DHT11
-DHT dht(DHTPIN, DHTTYPE);
+// Motor control pins
+#define IN1 D1  // Right motor forward
+#define IN2 D2  // Right motor backward
+#define IN3 D3  // Left motor forward
+#define IN4 D4  // Left motor backward
+#define ENA D5  // Right motor speed (PWM)
+#define ENB D6  // Left motor speed (PWM)
 
-#define LDR_PIN A0
-#define LIGHT_THRESHOLD 50    // Light % below this → LED ON
-#define TEMP_THRESHOLD 32.0   // Temp < 32°C → Pump ON
+// Motor speed (0-255)
+int motorSpeed = 200;
 
-// ---------------- L298N Pins ----------------
-#define ENA D5
-#define IN1 D6
-#define IN2 D2
-#define ENB D7
-#define IN3 D0
-#define IN4 D8
-
-// ---------------- Webserver ----------------
 ESP8266WebServer server(80);
 
-// ---------------- Variables ----------------
-String mode = "none";   // Start with NO mode
-bool pumpState = false;
-bool lightState = false;
-int pumpSpeedPWM = 1000;
-int ledBrightness = 1000;
+// HTML page for car control
+const char* htmlPage = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Web Controlled Car</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .control-btn {
+            width: 80px;
+            height: 80px;
+            font-size: 24px;
+            margin: 5px;
+            border: none;
+            border-radius: 50%;
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+        }
+        .control-btn:active {
+            background-color: #45a049;
+        }
+        .stop-btn {
+            background-color: #f44336;
+        }
+        .stop-btn:active {
+            background-color: #da190b;
+        }
+        .speed-control {
+            margin: 20px 0;
+        }
+        .speed-slider {
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Web Controlled Car</h1>
+        
+        <div class="speed-control">
+            <label for="speed">Speed: <span id="speedValue">%SPEED%</span>%</label>
+            <input type="range" id="speed" min="0" max="100" value="%SPEED%" class="speed-slider">
+        </div>
+        
+        <div style="margin: 20px 0;">
+            <button class="control-btn" onclick="moveCar('forward')">↑</button><br>
+            <button class="control-btn" onclick="moveCar('left')">←</button>
+            <button class="control-btn stop-btn" onclick="moveCar('stop')">Stop</button>
+            <button class="control-btn" onclick="moveCar('right')">→</button><br>
+            <button class="control-btn" onclick="moveCar('backward')">↓</button>
+        </div>
+        
+        <div>
+            <p>IP Address: %IPADDRESS%</p>
+        </div>
+    </div>
 
-// ---------------- Setup ----------------
+    <script>
+        function moveCar(direction) {
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", "/" + direction, true);
+            xhr.send();
+        }
+        
+        document.getElementById('speed').addEventListener('input', function() {
+            var speed = this.value;
+            document.getElementById('speedValue').textContent = speed;
+            
+            var xhr = new XMLHttpRequest();
+            xhr.open("GET", "/speed?value=" + speed, true);
+            xhr.send();
+        });
+    </script>
+</body>
+</html>
+)rawliteral";
+
 void setup() {
-  Serial.begin(115200);
-  dht.begin();
-
-  pinMode(ENA, OUTPUT);
-  pinMode(IN1, OUTPUT);
-  pinMode(IN2, OUTPUT);
-  pinMode(ENB, OUTPUT);
-  pinMode(IN3, OUTPUT);
-  pinMode(IN4, OUTPUT);
-
-  // OFF initially
-  analogWrite(ENA, 0);
-  analogWrite(ENB, 0);
-  digitalWrite(IN1, HIGH);
-  digitalWrite(IN2, LOW);
-  digitalWrite(IN3, LOW);
-  digitalWrite(IN4, LOW);
-
-  // WiFi
-  WiFi.begin(WLAN_SSID, WLAN_PASS);
-  Serial.print("Connecting to WiFi");
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500); Serial.print(".");
-  }
-  Serial.println("\nWiFi connected! IP: " + WiFi.localIP().toString());
-
-  // Routes
-  server.on("/", handleRoot);
-  server.on("/mode", handleMode);
-  server.on("/pump", handlePump);
-  server.on("/light", handleLight);
-
-  server.begin();
-  Serial.println("Webserver started");
+    Serial.begin(115200);
+    
+    // Initialize motor control pins
+    pinMode(IN1, OUTPUT);
+    pinMode(IN2, OUTPUT);
+    pinMode(IN3, OUTPUT);
+    pinMode(IN4, OUTPUT);
+    pinMode(ENA, OUTPUT);
+    pinMode(ENB, OUTPUT);
+    
+    // Stop motors initially
+    stopMotors();
+    
+    // Connect to WiFi
+    WiFi.begin(ssid, password);
+    Serial.print("Connecting to WiFi");
+    
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+    
+    Serial.println("");
+    Serial.println("WiFi connected");
+    Serial.print("IP address: ");
+    Serial.println(WiFi.localIP());
+    
+    // Define server routes
+    server.on("/", HTTP_GET, handleRoot);
+    server.on("/forward", HTTP_GET, handleForward);
+    server.on("/backward", HTTP_GET, handleBackward);
+    server.on("/left", HTTP_GET, handleLeft);
+    server.on("/right", HTTP_GET, handleRight);
+    server.on("/stop", HTTP_GET, handleStop);
+    server.on("/speed", HTTP_GET, handleSpeed);
+    
+    // Start server
+    server.begin();
+    Serial.println("HTTP server started");
 }
 
 void loop() {
-  server.handleClient();
-
-  static unsigned long lastUpdate = 0;
-  if (millis() - lastUpdate > 5000) { // every 5s
-    lastUpdate = millis();
-    if (mode == "automatic") applyAutomaticMode();
-  }
+    server.handleClient();
 }
 
-// ---------------- Webpage ----------------
 void handleRoot() {
-  float temp = dht.readTemperature();
-  float hum = dht.readHumidity();
-  int ldrRaw = analogRead(LDR_PIN);
-  int lightPercent = map(ldrRaw, 0, 1023, 0, 100);
-
-  String page = "<html><head><title>Smart Agriculture</title>";
-  page += "<meta http-equiv='refresh' content='5'></head><body>";
-  page += "<h2>Smart Agriculture Control</h2>";
-  page += "<p><b>Mode:</b> " + mode + "</p>";
-  page += "<p>Temperature: " + String(temp) + " °C</p>";
-  page += "<p>Humidity: " + String(hum) + " %</p>";
-  page += "<p>Light: " + String(lightPercent) + " %</p>";
-
-  // Mode selection
-  page += "<p><a href='/mode?set=automatic'><button>Automatic Mode</button></a> ";
-  page += "<a href='/mode?set=manual'><button>Manual Mode</button></a></p>";
-
-  if (mode == "manual") {
-    page += "<h3>Manual Controls</h3>";
-    page += "<p>Pump (Now " + String(pumpState ? "ON" : "OFF") + "): ";
-    page += "<a href='/pump?set=ON'><button>ON</button></a> ";
-    page += "<a href='/pump?set=OFF'><button>OFF</button></a></p>";
-
-    page += "<p>Light (Now " + String(lightState ? "ON" : "OFF") + "): ";
-    page += "<a href='/light?set=ON'><button>ON</button></a> ";
-    page += "<a href='/light?set=OFF'><button>OFF</button></a></p>";
-  }
-
-  page += "</body></html>";
-  server.send(200, "text/html", page);
+    String page = htmlPage;
+    page.replace("%SPEED%", String(map(motorSpeed, 0, 255, 0, 100)));
+    page.replace("%IPADDRESS%", WiFi.localIP().toString());
+    server.send(200, "text/html", page);
 }
 
-// ---------------- Handlers ----------------
-void handleMode() {
-  if (server.hasArg("set")) {
-    String newMode = server.arg("set");
-    if (newMode == "automatic" || newMode == "manual") {
-      mode = newMode;
-      if (mode == "automatic") applyAutomaticMode();
-      if (mode == "manual") { setPump(false); setLight(false); } // manual starts OFF
+void handleForward() {
+    moveForward();
+    server.send(200, "text/plain", "Moving Forward");
+}
+
+void handleBackward() {
+    moveBackward();
+    server.send(200, "text/plain", "Moving Backward");
+}
+
+void handleLeft() {
+    turnLeft();
+    server.send(200, "text/plain", "Turning Left");
+}
+
+void handleRight() {
+    turnRight();
+    server.send(200, "text/plain", "Turning Right");
+}
+
+void handleStop() {
+    stopMotors();
+    server.send(200, "text/plain", "Stopped");
+}
+
+void handleSpeed() {
+    if (server.hasArg("value")) {
+        int speedPercent = server.arg("value").toInt();
+        motorSpeed = map(speedPercent, 0, 100, 0, 255);
+        analogWrite(ENA, motorSpeed);
+        analogWrite(ENB, motorSpeed);
+        server.send(200, "text/plain", "Speed set to " + String(speedPercent) + "%");
     }
-  }
-  server.sendHeader("Location", "/");
-  server.send(303);
 }
 
-void handlePump() {
-  if (mode == "manual" && server.hasArg("set")) {
-    setPump(server.arg("set") == "ON");
-  }
-  server.sendHeader("Location", "/");
-  server.send(303);
+// Motor control functions
+void moveForward() {
+    digitalWrite(IN1, HIGH);
+    digitalWrite(IN2, LOW);
+    digitalWrite(IN3, HIGH);
+    digitalWrite(IN4, LOW);
+    analogWrite(ENA, motorSpeed);
+    analogWrite(ENB, motorSpeed);
 }
 
-void handleLight() {
-  if (mode == "manual" && server.hasArg("set")) {
-    setLight(server.arg("set") == "ON");
-  }
-  server.sendHeader("Location", "/");
-  server.send(303);
+void moveBackward() {
+    digitalWrite(IN1, LOW);
+    digitalWrite(IN2, HIGH);
+    digitalWrite(IN3, LOW);
+    digitalWrite(IN4, HIGH);
+    analogWrite(ENA, motorSpeed);
+    analogWrite(ENB, motorSpeed);
 }
 
-// ---------------- Logic ----------------
-void applyAutomaticMode() {
-  float temp = dht.readTemperature();
-  int ldrRaw = analogRead(LDR_PIN);
-  int lightPercent = map(ldrRaw, 0, 1023, 0, 100);
-
-  if (!isnan(temp) && temp < TEMP_THRESHOLD) setPump(true);
-  else setPump(false);
-
-  if (lightPercent < LIGHT_THRESHOLD) setLight(true);
-  else setLight(false);
+void turnLeft() {
+    digitalWrite(IN1, HIGH);
+    digitalWrite(IN2, LOW);
+    digitalWrite(IN3, LOW);
+    digitalWrite(IN4, HIGH);
+    analogWrite(ENA, motorSpeed);
+    analogWrite(ENB, motorSpeed);
 }
 
-void setPump(bool state) {
-  pumpState = state;
-  analogWrite(ENA, state ? pumpSpeedPWM : 0);
-  Serial.println(state ? "Pump: ON" : "Pump: OFF");
+void turnRight() {
+    digitalWrite(IN1, LOW);
+    digitalWrite(IN2, HIGH);
+    digitalWrite(IN3, HIGH);
+    digitalWrite(IN4, LOW);
+    analogWrite(ENA, motorSpeed);
+    analogWrite(ENB, motorSpeed);
 }
 
-void setLight(bool state) {
-  lightState = state;
-  analogWrite(ENB, state ? ledBrightness : 0);
-  Serial.println(state ? "LED: ON" : "LED: OFF");
+void stopMotors() {
+    digitalWrite(IN1, LOW);
+    digitalWrite(IN2, LOW);
+    digitalWrite(IN3, LOW);
+    digitalWrite(IN4, LOW);
+    analogWrite(ENA, 0);
+    analogWrite(ENB, 0);
 }
